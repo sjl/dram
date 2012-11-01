@@ -99,9 +99,7 @@
     (always (concat [arg] args))))
 
 (defparser value-filter []
-  (optional-whitespace)
   (char \|)
-  (optional-whitespace)
   (let->> [filter-path (path)
            filter-args (optional (value-filter-args))]
     (always {:path filter-path
