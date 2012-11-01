@@ -79,3 +79,56 @@
     (parses-as "{{42 }}" (p/variable) 42)
     (parses-as "{{42       }}" (p/variable) 42)
     (parses-as "{{\n\t\n\t42}}" (p/variable) 42)))
+
+(deftest extends-test
+  (testing "{% extends ... %} parses to its own custom AST element."
+    (parses-as "{% extends \"p\" %}" (p/tag-extends) {:type :extends :path "p"})
+    (parses-as "{% extends \"foo/bar\" %}" (p/tag-extends) {:type :extends
+                                                            :path "foo/bar"}))
+  (testing "{% extends ... %} requires a non-empty argument."
+    (is-error "{% extends \"\" %}" (p/tag-extends))
+    (is-error "{% extends %}" (p/tag-extends)))
+  (testing "{% extends ... %} doesn't accept garbage."
+    (is-error "{% extends foo %}" (p/tag-extends))
+    (is-error "{% extends \"foo\" foo %}" (p/tag-extends))
+    (is-error "{% extends foo \"foo\" %}" (p/tag-extends))
+    (is-error "{% extends foo\"foo\" %}" (p/tag-extends))
+    (is-error "{% extends 43 %}" (p/tag-extends))
+    (is-error "{% extends foo/bar %}" (p/tag-extends))
+    (is-error "{% extends the quick brown fox %}" (p/tag-extends))))
+
+(deftest block-test
+  (testing "{% block ... %} parses to an intermediate AST element."
+    (parses-as "{% block cats %}" (p/tag-block-open) {:name "cats"})
+    (parses-as "{% block boots-and-cats %}" (p/tag-block-open)
+               {:name "boots-and-cats"})
+    (parses-as "{% block hello-world_585 %}" (p/tag-block-open)
+               {:name "hello-world_585"})
+    (parses-as "{% block a %}" (p/tag-block-open) {:name "a"})
+    (parses-as "{% block a_ %}" (p/tag-block-open) {:name "a_"}))
+  (testing "{% block ... %} requires valid block names."
+    (is-error "{% block 1 %}" (p/tag-block-open))
+    (is-error "{% block -1 %}" (p/tag-block-open))
+    (is-error "{% block -foo %}" (p/tag-block-open))
+    (is-error "{% block __foo %}" (p/tag-block-open))
+    (is-error "{% block 12dogs %}" (p/tag-block-open))
+    (is-error "{% block c&ats %}" (p/tag-block-open))
+    (is-error "{% block boots and cats %}" (p/tag-block-open))
+    (is-error "{% block \"rochester-made\" %}" (p/tag-block-open))
+    (is-error "{% block dogs* %}" (p/tag-block-open))
+    (is-error "{% block dogs% %}" (p/tag-block-open))
+    (is-error "{% block dogs} %}" (p/tag-block-open)))
+  (testing "{% block ... %} allows wonky whitespace."
+    (parses-as "{%block foo%}" (p/tag-block-open) {:name "foo"})
+    (parses-as "{%   block foo%}" (p/tag-block-open) {:name "foo"})
+    (parses-as "{%block      foo     %}" (p/tag-block-open) {:name "foo"})
+    (parses-as "{%\n\nblock\tfoo\n%}" (p/tag-block-open) {:name "foo"}))
+  (testing "{% block ... %} REQUIRES whitespace between block and the name."
+    (is-error "{% blockfoo %}" (p/tag-block-open)))
+  (testing "{% endblock %} parses to nil and allows weird whitespace."
+    (parses-as "{% endblock %}" (p/tag-block-close) nil)
+    (parses-as "{%\nendblock\t%}" (p/tag-block-close) nil)
+    (parses-as "{%endblock %}" (p/tag-block-close) nil)
+    (parses-as "{% endblock%}" (p/tag-block-close) nil))
+  (testing "{% endblock %} does NOT take a block name (for now)."
+    (is-error "{% endblock foo %}" (p/tag-block-open))))

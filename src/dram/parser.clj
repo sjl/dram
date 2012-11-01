@@ -45,10 +45,19 @@
   (either (attempt (literal-string-escape))
           (token (complement #{\"}))))
 
-(defparser literal-string []
+(defparser literal-string-empty []
+  (string "\"\"")
+  (always ""))
+
+(defparser literal-string-nonempty []
   (between (char \") (char \")
-           (let->> [contents (many (literal-string-char))]
+           (let->> [contents (many1 (literal-string-char))]
              (always (apply str contents)))))
+
+(defparser literal-string []
+  (either (attempt (literal-string-empty))
+          (attempt (literal-string-nonempty))))
+
 
 ; Literals --------------------------------------------------------------------
 (defparser literal []
@@ -58,18 +67,71 @@
 
 ; Variables -------------------------------------------------------------------
 (defparser variable-open []
-  (times 2 (char \{))
+  (string "{{")
   (optional-whitespace)
   (always nil))
 
 (defparser variable-close []
   (optional-whitespace)
-  (times 2 (char \}))
+  (string "}}")
   (always nil))
 
 (defparser variable []
   (between (variable-open) (variable-close)
            (choice (literal))))
+
+
+; Tags ------------------------------------------------------------------------
+(defparser tag-open []
+  (string "{%")
+  (optional-whitespace)
+  (always nil))
+
+(defparser tag-close []
+  (optional-whitespace)
+  (string "%}")
+  (always nil))
+
+(defparser tag-guts []
+  (always nil))
+
+(defparser tag []
+  (between (tag-open) (tag-close)
+           (tag-guts)))
+
+
+
+; Extends ---------------------------------------------------------------------
+(defparser tag-extends []
+  (between (tag-open) (tag-close)
+           (let->> [_ (string "extends")
+                    _ (required-whitespace)
+                    path (literal-string-nonempty)]
+             (always {:type :extends
+                      :path path}))))
+
+; Block -----------------------------------------------------------------------
+(defparser tag-block-name-char []
+  (choice (letter)
+          (digit)
+          (token #{\- \_})))
+
+(defparser tag-block-name []
+  (let->> [fch (letter)
+           chs (many (tag-block-name-char))]
+    (always (apply str (concat [fch] chs)))))
+
+(defparser tag-block-open []
+  (between (tag-open) (tag-close)
+           (let->> [_ (string "block")
+                    _ (required-whitespace)
+                    name (tag-block-name)]
+             (always {:name name}))))
+
+(defparser tag-block-close []
+  (between (tag-open) (tag-close)
+           (let->> [_ (string "endblock")]
+             (always nil))))
 
 
 
