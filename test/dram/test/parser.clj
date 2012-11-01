@@ -138,18 +138,51 @@
     (is-error "{% endblock foo %}" (p/tag-block-open)))
   (testing "Empty blocks are totally fine."
     (parses-as "{% block foo %}{% endblock %}" (p/tag-block)
-               {:type :block :name "foo" :contents []})))
+               {:type :block :name "foo" :contents []}))
+  (testing "Blocks can contain anything except other blocks."
+    (parses-as "{% block foo %}hi{% endblock %}" (p/tag-block)
+               {:type :block :name "foo" :contents ["hi"]})
+    (parses-as "{% block foo %}hi {{ 1 }} five{% endblock %}" (p/tag-block)
+               {:type :block :name "foo" :contents ["hi " 1 " five"]})
+
+    ))
+
 (deftest raw-text-test
   (testing "Raw text parses to a Clojure string."
     (parses-as "Hello" (p/raw-text) "Hello")
     (parses-as "hello there world" (p/raw-text) "hello there world")
-    (parses-as "  { foo } is okay" (p/raw-text) "  { foo } is okay"))
-    (parses-as "so is { % foo % }" (p/raw-text) "so is { % foo % }") 
+    (parses-as "  { foo } is okay" (p/raw-text) "  { foo } is okay")
+    (parses-as "so is { % foo % }" (p/raw-text) "so is { % foo % }"))
   (testing "Reserved characters do not parse as raw text."
     (parses-as "Hello{{ world }}" (p/raw-text) "Hello")
     (parses-as "Hello{% block world %}" (p/raw-text) "Hello"))
   (testing "Raw text is not zero-length."
     (is-error "{{ world }}" (p/raw-text))
-    (is-error "" (p/raw-text)))
-  )
+    (is-error "" (p/raw-text))))
 
+(deftest template-chunk-test
+ (testing "A template chunk can be raw text."
+    (parses-as "Hello" (p/template-chunk) "Hello")
+    (parses-as "  { foo }" (p/template-chunk) "  { foo }"))
+  (testing "A template chunk can be a variable."
+    (parses-as "{{ 1 }}" (p/template-chunk) 1)))
+
+(deftest template-base-test
+  (testing "A base template can be made up of raw text, variables, ...."
+    (parses-as "" (p/template-base) [])
+    (parses-as "Hello" (p/template-base)
+               ["Hello"])
+    (parses-as "Hello {{ \"Steve\" }}" (p/template-base)
+               ["Hello " "Steve"])
+    (parses-as "Age: {{ 27 }} years old" (p/template-base)
+               ["Age: " 27 " years old"]))
+  (testing "A base template can contain blocks."
+    (parses-as "{% block foo %}{% endblock %}" (p/template-base)
+               [{:type :block :name "foo" :contents []}])
+    (parses-as "hello {% block username %}{% endblock %}" (p/template-base)
+               ["hello " {:type :block :name "username" :contents []}])
+    (parses-as "foo {% block a %}{% endblock %} bar {{ 42 }}" (p/template-base)
+               ["foo "
+                {:type :block :name "a" :contents []}
+                " bar "
+                42])))

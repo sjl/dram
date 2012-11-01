@@ -117,6 +117,8 @@
 
 
 ; Block -----------------------------------------------------------------------
+(declare template-chunk)
+
 (defparser tag-block-name-char []
   (choice (letter)
           (digit)
@@ -139,14 +141,16 @@
            (let->> [_ (string "endblock")]
              (always nil))))
 
+(defparser tag-block-contents []
+  (many (template-chunk)))
+
 (defparser tag-block []
   (let->> [{:keys [name]} (tag-block-open)
-           guts (string "")
+           contents (tag-block-contents)
            close (tag-block-close)]
     (always {:type :block
              :name name
-             :contents []
-             })))
+             :contents contents})))
 
 
 ; Raw Text --------------------------------------------------------------------
@@ -164,11 +168,12 @@
 
 ; High-Level ------------------------------------------------------------------
 (defparser template-chunk []
-  (choice (variable)))
+  (choice (attempt (variable))
+          (attempt (raw-text))))
 
 (defparser template-base []
-  (many (choice (template-chunk)
-                (tag-block))))
+  (many (choice (attempt (tag-block))
+                (attempt (template-chunk)))))
 
 (defparser template-child []
   (optional-whitespace)
