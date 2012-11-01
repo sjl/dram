@@ -125,6 +125,61 @@
 
     "\"foo\"" "foo"))
 
+(deftest value-test
+  (letfn [(v [base filters]
+            {:type :value :base base :filters filters})
+          (f [path args]
+            {:path path :args args})]
+    (testing-parser
+      (p/value)
+      "A context value's base can be a path or a literal."
+
+      "42"         (v 42 [])
+      "\"foo\""    (v "foo" [])
+      "user.email" (v ["user" "email"] [])
+      "users.0"    (v ["users" "0"] []))
+
+    (testing-parser
+      (p/value)
+      "A context value can be filtered through one or more filters."
+
+      "42|abs"        (v 42 [(f ["abs"] [])])
+      "42|math.floor" (v 42 [(f ["math" "floor"] [])])
+
+      "\"foo\"|reverse|upper"
+      (v "foo" [(f ["reverse"] [])
+                (f ["upper"] [])])
+
+      "\"foo\"|reverse|upper|custom.dogs"
+      (v "foo" [(f ["reverse"] [])
+                (f ["upper"] [])
+                (f ["custom" "dogs"] [])]))
+
+    (testing-parser
+      (p/value)
+      "Filters can take arguments."
+
+      "total|add:extra.widgets"
+      (v ["total"] [(f ["add"] [["extra" "widgets"]])])
+
+      "description|trim:10"
+      (v ["description"] [(f ["trim"] [10])])
+
+      "description|slice:0,30"
+      (v ["description"] [(f ["slice"] [0 30])])
+
+      "user.join-date|date:\"yyyy-mm\",\"est\""
+      (v ["user" "join-date"] [(f ["date"] ["yyyy-mm" "est"])])
+
+      "number_of_cats|pluralize:\"y,ies\""
+      (v ["number_of_cats"] [(f ["pluralize"] ["y,ies"])])
+
+      "foo|join:\",\"|strip:\" ,.{}\"|slice:20,30,2|length"
+      (v ["foo"] [(f ["join"] [","])
+                  (f ["strip"] [" ,.{}"])
+                  (f ["slice"] [20 30 2])
+                  (f ["length"] [])]))))
+
 (deftest variable-test
   (testing-parser
     (p/variable) "Variables can be simple literals."

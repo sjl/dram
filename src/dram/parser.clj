@@ -71,6 +71,50 @@
           (literal-string)))
 
 
+; Paths -----------------------------------------------------------------------
+(defparser path-char []
+  (choice (letter)
+          (digit)
+          (token #{\_ \-})))
+
+(defparser path-segment []
+  (let->> [contents (many1 (path-char))]
+    (always (apply str contents))))
+
+(defparser path []
+  (let->> [seg (path-segment)
+           segs (many (>> (char \.) (path-segment)))]
+    (always (concat [seg] segs))))
+
+
+; Context Values --------------------------------------------------------------
+(defparser value-filter-arg []
+  (choice (literal)
+          (path)))
+
+(defparser value-filter-args []
+  (char \:)
+  (let->> [arg (value-filter-arg)
+           args (many (>> (char \,) (value-filter-arg)))]
+    (always (concat [arg] args))))
+
+(defparser value-filter []
+  (optional-whitespace)
+  (char \|)
+  (optional-whitespace)
+  (let->> [filter-path (path)
+           filter-args (optional (value-filter-args))]
+    (always {:path filter-path
+             :args (or filter-args [])})))
+
+(defparser value []
+  (let->> [base (choice (literal) (path))
+           filters (many (value-filter))]
+    (always {:type :value
+             :base base
+             :filters filters})))
+
+
 ; Variables -------------------------------------------------------------------
 (defparser variable-open []
   (string "{{")
@@ -104,22 +148,6 @@
 (defparser tag []
   (between (tag-open) (tag-close)
            (tag-guts)))
-
-
-; Paths -----------------------------------------------------------------------
-(defparser path-char []
-  (choice (letter)
-          (digit)
-          (token #{\_ \-})))
-
-(defparser path-segment []
-  (let->> [contents (many1 (path-char))]
-    (always (apply str contents))))
-
-(defparser path []
-  (let->> [seg (path-segment)
-           segs (many (>> (char \.) (path-segment)))]
-    (always (concat [seg] segs))))
 
 
 ; Extends ---------------------------------------------------------------------
@@ -172,8 +200,8 @@
 ; Raw Text --------------------------------------------------------------------
 (defparser raw-text-char []
   (let->> [ch (any-char)
-           nch (lookahead (optional (token (set "%{"))))]
-    (if (and (= (str ch) "{") nch)
+           nch (lookahead (optional (token #{\{ \%})))]
+    (if (and (= ch \{) nch)
       (never)
       (always ch))))
 
