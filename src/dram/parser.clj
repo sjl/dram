@@ -3,6 +3,12 @@
   (:use [the.parsatron]))
 
 
+; Utilities -------------------------------------------------------------------
+(defparser optional [p]
+  (either (attempt p)
+          (always nil)))
+
+
 ; Whitespace ------------------------------------------------------------------
 (defparser whitespace-char []
   (token #{\space \newline \tab}))
@@ -100,7 +106,6 @@
            (tag-guts)))
 
 
-
 ; Extends ---------------------------------------------------------------------
 (defparser tag-extends []
   (between (tag-open) (tag-close)
@@ -109,6 +114,7 @@
                     path (literal-string-nonempty)]
              (always {:type :extends
                       :path path}))))
+
 
 ; Block -----------------------------------------------------------------------
 (defparser tag-block-name-char []
@@ -133,6 +139,45 @@
            (let->> [_ (string "endblock")]
              (always nil))))
 
+(defparser tag-block []
+  (let->> [{:keys [name]} (tag-block-open)
+           guts (string "")
+           close (tag-block-close)]
+    (always {:type :block
+             :name name
+             :contents []
+             })))
+
+
+; Raw Text --------------------------------------------------------------------
+(defparser raw-text-char []
+  (let->> [ch (any-char)
+           nch (lookahead (optional (token (set "%{"))))]
+    (if (and (= (str ch) "{") nch)
+      (never)
+      (always ch))))
+
+(defparser raw-text []
+  (let->> [contents (many1 (attempt (raw-text-char)))]
+    (always (apply str contents))))
+
+
+; High-Level ------------------------------------------------------------------
+(defparser template-chunk []
+  (choice (variable)))
+
+(defparser template-base []
+  (many (choice (template-chunk)
+                (tag-block))))
+
+(defparser template-child []
+  (optional-whitespace)
+  (tag-extends)
+  (many (tag-block)))
+
+(defparser template []
+  (choice (template-base)
+          (template-child)))
 
 
 ; Main ------------------------------------------------------------------------

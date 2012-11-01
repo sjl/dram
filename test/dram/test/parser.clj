@@ -11,6 +11,10 @@
   `(~'is (~'= ~output (run ~parser ~input))))
 
 
+(deftest optional-test
+  (testing "Optional utility."
+    (parses-as "42" (p/optional (p/literal-integer)) 42)
+    (parses-as "a42" (p/optional (p/literal-integer)) nil)))
 (deftest whitespace-test
   (testing "Optional whitespace parses to nil."
     (parses-as "" (p/optional-whitespace) nil)
@@ -131,4 +135,21 @@
     (parses-as "{%endblock %}" (p/tag-block-close) nil)
     (parses-as "{% endblock%}" (p/tag-block-close) nil))
   (testing "{% endblock %} does NOT take a block name (for now)."
-    (is-error "{% endblock foo %}" (p/tag-block-open))))
+    (is-error "{% endblock foo %}" (p/tag-block-open)))
+  (testing "Empty blocks are totally fine."
+    (parses-as "{% block foo %}{% endblock %}" (p/tag-block)
+               {:type :block :name "foo" :contents []})))
+(deftest raw-text-test
+  (testing "Raw text parses to a Clojure string."
+    (parses-as "Hello" (p/raw-text) "Hello")
+    (parses-as "hello there world" (p/raw-text) "hello there world")
+    (parses-as "  { foo } is okay" (p/raw-text) "  { foo } is okay"))
+    (parses-as "so is { % foo % }" (p/raw-text) "so is { % foo % }") 
+  (testing "Reserved characters do not parse as raw text."
+    (parses-as "Hello{{ world }}" (p/raw-text) "Hello")
+    (parses-as "Hello{% block world %}" (p/raw-text) "Hello"))
+  (testing "Raw text is not zero-length."
+    (is-error "{{ world }}" (p/raw-text))
+    (is-error "" (p/raw-text)))
+  )
+
