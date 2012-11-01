@@ -106,6 +106,22 @@
            (tag-guts)))
 
 
+; Paths -----------------------------------------------------------------------
+(defparser path-char []
+  (choice (letter)
+          (digit)
+          (token #{\_ \-})))
+
+(defparser path-segment []
+  (let->> [contents (many1 (path-char))]
+    (always (apply str contents))))
+
+(defparser path []
+  (let->> [seg (path-segment)
+           segs (many (>> (char \.) (path-segment)))]
+    (always (concat [seg] segs))))
+
+
 ; Extends ---------------------------------------------------------------------
 (defparser tag-extends []
   (between (tag-open) (tag-close)
