@@ -3,11 +3,13 @@
             [clojure.test :refer :all]
             [the.parsatron :refer [run]]))
 
+
 (defmacro is-error [input parser]
   `(~'is (~'thrown? RuntimeException (run ~parser ~input))))
 
 (defmacro parses-as [input parser output]
   `(~'is (~'= ~output (run ~parser ~input))))
+
 
 (deftest whitespace-test
   (testing "Optional whitespace parses to nil."
@@ -50,11 +52,30 @@
   (testing "Escape sequences are supported in strings."
     (parses-as "\"a\\nb\"" (p/literal-string) "a\nb")
     (parses-as "\"a\\\\b\"" (p/literal-string) "a\\b")
-    (parses-as "\"a\\\\nb\"" (p/literal-string) "a\\nb"))
-    (parses-as "\"a\\\"b\"" (p/literal-string) "a\"b")
+    (parses-as "\"a\\\\nb\"" (p/literal-string) "a\\nb")
+    (parses-as "\"a\\\"b\"" (p/literal-string) "a\"b"))
   (testing "Garbage doesn't parse as strings."
-    (is-error "foo" (p/literal-string)) 
+    (is-error "foo" (p/literal-string))
     (is-error "\"foo" (p/literal-string))
     (is-error "foo\"" (p/literal-string)))
   (testing "Parses the first bit as a string, so it should succeed (for now)."
     (parses-as "\"fo\"o\"" (p/literal-string) "fo")))
+
+(deftest literal-test
+  (testing "Literals can parse integers."
+    (parses-as "-42" (p/literal) -42)
+    (parses-as "585" (p/literal) 585))
+  (testing "Literals can parse strings."
+    (parses-as "\"foo\"" (p/literal-string) "foo")))
+
+(deftest variable-test
+  (testing "Variables can be simple literals (though I don't know why you'd bother)."
+    (parses-as "{{ 42 }}" (p/variable) 42)
+    (parses-as "{{ -2 }}" (p/variable) -2)
+    (parses-as "{{ \"foo\" }}" (p/variable) "foo"))
+  (testing "Variables can handle wonky whitespace."
+    (parses-as "{{42}}" (p/variable) 42)
+    (parses-as "{{ 42}}" (p/variable) 42)
+    (parses-as "{{42 }}" (p/variable) 42)
+    (parses-as "{{42       }}" (p/variable) 42)
+    (parses-as "{{\n\t\n\t42}}" (p/variable) 42)))

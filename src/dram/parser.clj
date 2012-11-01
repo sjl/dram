@@ -50,6 +50,28 @@
            (let->> [contents (many (literal-string-char))]
              (always (apply str contents)))))
 
+; Literals --------------------------------------------------------------------
+(defparser literal []
+  (choice (literal-integer)
+          (literal-string)))
+
+
+; Variables -------------------------------------------------------------------
+(defparser variable-open []
+  (times 2 (char \{))
+  (optional-whitespace)
+  (always nil))
+
+(defparser variable-close []
+  (optional-whitespace)
+  (times 2 (char \}))
+  (always nil))
+
+(defparser variable []
+  (between (variable-open) (variable-close)
+           (choice (literal))))
+
+
 
 ; Main ------------------------------------------------------------------------
 (defn parse
@@ -59,5 +81,5 @@
 
 
 (comment
-  (parse "")
-  ) 
+  (parse "\"foo\"")
+  )
