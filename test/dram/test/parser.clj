@@ -143,9 +143,7 @@
     (parses-as "{% block foo %}hi{% endblock %}" (p/tag-block)
                {:type :block :name "foo" :contents ["hi"]})
     (parses-as "{% block foo %}hi {{ 1 }} five{% endblock %}" (p/tag-block)
-               {:type :block :name "foo" :contents ["hi " 1 " five"]})
-
-    ))
+               {:type :block :name "foo" :contents ["hi " 1 " five"]})))
 
 (deftest raw-text-test
   (testing "Raw text parses to a Clojure string."
@@ -168,21 +166,49 @@
     (parses-as "{{ 1 }}" (p/template-chunk) 1)))
 
 (deftest template-base-test
-  (testing "A base template can be made up of raw text, variables, ...."
-    (parses-as "" (p/template-base) [])
-    (parses-as "Hello" (p/template-base)
-               ["Hello"])
-    (parses-as "Hello {{ \"Steve\" }}" (p/template-base)
-               ["Hello " "Steve"])
-    (parses-as "Age: {{ 27 }} years old" (p/template-base)
-               ["Age: " 27 " years old"]))
-  (testing "A base template can contain blocks."
-    (parses-as "{% block foo %}{% endblock %}" (p/template-base)
-               [{:type :block :name "foo" :contents []}])
-    (parses-as "hello {% block username %}{% endblock %}" (p/template-base)
-               ["hello " {:type :block :name "username" :contents []}])
-    (parses-as "foo {% block a %}{% endblock %} bar {{ 42 }}" (p/template-base)
-               ["foo "
-                {:type :block :name "a" :contents []}
-                " bar "
-                42])))
+  (letfn [(bt [contents]
+            {:type :base :contents contents})]
+    (testing "A base template can be made up of raw text, variables, ...."
+      (parses-as "" (p/template-base) (bt []))
+      (parses-as "Hello" (p/template-base)
+                 (bt ["Hello"]))
+      (parses-as "Hello {{ \"Steve\" }}" (p/template-base)
+                 (bt ["Hello " "Steve"]))
+      (parses-as "Age: {{ 27 }} years old" (p/template-base)
+                 (bt ["Age: " 27 " years old"])))
+    (testing "A base template can contain blocks."
+      (parses-as "{% block foo %}{% endblock %}" (p/template-base)
+                 (bt [{:type :block :name "foo" :contents []}]))
+      (parses-as "hello {% block username %}{% endblock %}" (p/template-base)
+                 (bt ["hello " {:type :block :name "username" :contents []}]))
+      (parses-as "foo {% block a %}{% endblock %} bar {{ 42 }}" (p/template-base)
+                 (bt ["foo "
+                      {:type :block :name "a" :contents []}
+                      " bar "
+                      42])))))
+
+(deftest template-child-test
+  (letfn [(ct [extends blocks]
+            {:type :child :extends extends :blocks blocks})]
+    (testing "A child template requires an extends tag."
+      (parses-as "{% extends \"a\" %}" (p/template-child)
+                 (ct "a" {}))
+      (parses-as "      {% extends \"a\" %}" (p/template-child)
+                 (ct "a" {}))
+      (parses-as "{% extends \"a\" %}\n\n" (p/template-child)
+                 (ct "a" {})))
+    (testing "A child template may contain blocks to override."
+      (parses-as "
+                 {% extends \"a\" %}
+                 {% block foo %}{% endblock %}
+                 "
+                 (p/template-child)
+                 (ct "a" {"foo" []}))
+      (parses-as "
+                 {% extends \"a\" %}
+                 {% block foo %}hello world{% endblock %}
+                 {% block bar %}{{ 10 }}{% endblock %}
+                 "
+                 (p/template-child)
+                 (ct "a" {"foo" ["hello world"]
+                          "bar" [10]})))))

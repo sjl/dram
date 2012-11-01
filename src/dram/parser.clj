@@ -172,13 +172,19 @@
           (attempt (raw-text))))
 
 (defparser template-base []
-  (many (choice (attempt (tag-block))
-                (attempt (template-chunk)))))
+  (let->> [contents (many (choice (attempt (tag-block))
+                                  (attempt (template-chunk))))
+           _ (eof)]
+    (always {:type :base :contents contents})))
 
 (defparser template-child []
-  (optional-whitespace)
-  (tag-extends)
-  (many (tag-block)))
+  (let->> [{:keys [path]} (between (optional-whitespace) (optional-whitespace)
+                                   (tag-extends))
+           blocks (many (between (optional-whitespace) (optional-whitespace)
+                                 (tag-block)))
+           _ (eof)]
+    (always {:type :child :extends path
+             :blocks (into {} (map (juxt :name :contents) blocks))})))
 
 (defparser template []
   (choice (template-base)
