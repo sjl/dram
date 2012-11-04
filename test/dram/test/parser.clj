@@ -4,6 +4,7 @@
             [the.parsatron :as parsatron :refer [run]]))
 
 
+; Convenience Macros ----------------------------------------------------------
 (defmacro is-error [input parser]
   `(~'is (~'thrown? RuntimeException (run ~parser ~input))))
 
@@ -24,6 +25,30 @@
               data)))
 
 
+; AST Element Shortcuts -------------------------------------------------------
+(defn b [name contents]   ; Block
+  {:type :block :name name :contents contents})
+
+(defn v [base filters]    ; Value
+  {:type :value :base base :filters filters})
+
+(defn f [path args]       ; Filter
+  {:path path :args args})
+
+(defn i [path args]       ; Innards
+  {:path path :args args})
+
+(defn it [path args]      ; Inline Tag
+  {:type :inline-tag :path path :args args})
+
+(defn ct [extends blocks] ; Child Template
+  {:type :child :extends extends :blocks blocks})
+
+(defn bt [contents]       ; Base Template
+  {:type :base :contents contents})
+
+
+; Tests -----------------------------------------------------------------------
 (deftest optional-test
   (testing-parser
     (p/optional (p/literal-integer))
@@ -32,7 +57,7 @@
     "42" 42
     "a"  nil))
 
-(deftest separator-test
+(deftest separated-test
   (testing-parser
     (p/separated1 (parsatron/digit) (parsatron/char \,))
     "The separated1 parser parses items separated by things."
@@ -62,7 +87,8 @@
     "The separated1 parser doesn't allow garbage."
 
     "dogs"
-    "1,,2")
+    "1,,2"
+    "1 2")
 
   (testing-parser
     (p/separated (parsatron/digit) (parsatron/char \,))
@@ -70,7 +96,6 @@
 
     "1"     [\1]
     "1,2"   [\1 \2]
-    "1,2,3" [\1 \2 \3]
     ""      [])
 
   (testing-parser
@@ -89,8 +114,9 @@
       (parsatron/char \!))
     "The separated1 parser does not consume input if it fails."
 
-    "1,2" [\1 \2]
-    "!"   \!)
+    "1!"   [\1]
+    "1,2!" [\1 \2]
+    "!"    \!)
 
   (testing-parser
     (parsatron/let->> [a (p/separated (parsatron/digit) (parsatron/char \,))
@@ -196,76 +222,90 @@
     "\"foo\"" "foo"))
 
 (deftest value-test
-  (letfn [(v [base filters]
-            {:type :value :base base :filters filters})
-          (f [path args]
-            {:path path :args args})]
-    (testing-parser
-      (p/value)
-      "A context value's base can be a path or a literal."
+  (testing-parser
+    (p/value)
+    "A context value's base can be a path or a literal."
 
-      "42"         (v 42 [])
-      "\"foo\""    (v "foo" [])
-      "user.email" (v ["user" "email"] [])
-      "users.0"    (v ["users" "0"] []))
+    "42"         (v 42 [])
+    "\"foo\""    (v "foo" [])
+    "user.email" (v ["user" "email"] [])
+    "users.0"    (v ["users" "0"] []))
 
-    (testing-parser
-      (p/value)
-      "A context value can be filtered through one or more filters."
+  (testing-parser
+    (p/value)
+    "A context value can be filtered through one or more filters."
 
-      "42|abs"        (v 42 [(f ["abs"] [])])
-      "42|math.floor" (v 42 [(f ["math" "floor"] [])])
+    "42|abs"        (v 42 [(f ["abs"] [])])
+    "42|math.floor" (v 42 [(f ["math" "floor"] [])])
 
-      "\"foo\"|reverse|upper"
-      (v "foo" [(f ["reverse"] [])
-                (f ["upper"] [])])
+    "\"foo\"|reverse|upper"
+    (v "foo" [(f ["reverse"] [])
+              (f ["upper"] [])])
 
-      "\"foo\"|reverse|upper|custom.dogs"
-      (v "foo" [(f ["reverse"] [])
-                (f ["upper"] [])
-                (f ["custom" "dogs"] [])]))
+    "\"foo\"|reverse|upper|custom.dogs"
+    (v "foo" [(f ["reverse"] [])
+              (f ["upper"] [])
+              (f ["custom" "dogs"] [])]))
 
-    (testing-parser
-      (p/value)
-      "Filters can take arguments."
+  (testing-parser
+    (p/value)
+    "Filters can take arguments."
 
-      "total|add:extra.widgets"
-      (v ["total"] [(f ["add"] [["extra" "widgets"]])])
+    "total|add:extra.widgets"
+    (v ["total"] [(f ["add"] [["extra" "widgets"]])])
 
-      "description|trim:10"
-      (v ["description"] [(f ["trim"] [10])])
+    "description|trim:10"
+    (v ["description"] [(f ["trim"] [10])])
 
-      "description|slice:0,30"
-      (v ["description"] [(f ["slice"] [0 30])])
+    "description|slice:0,30"
+    (v ["description"] [(f ["slice"] [0 30])])
 
-      "user.join-date|date:\"yyyy-mm\",\"est\""
-      (v ["user" "join-date"] [(f ["date"] ["yyyy-mm" "est"])])
+    "user.join-date|date:\"yyyy-mm\",\"est\""
+    (v ["user" "join-date"] [(f ["date"] ["yyyy-mm" "est"])])
 
-      "number_of_cats|pluralize:\"y,ies\""
-      (v ["number_of_cats"] [(f ["pluralize"] ["y,ies"])])
+    "number_of_cats|pluralize:\"y,ies\""
+    (v ["number_of_cats"] [(f ["pluralize"] ["y,ies"])])
 
-      "foo|join:\",\"|strip:\" ,.{}\"|slice:20,30,2|length"
-      (v ["foo"] [(f ["join"] [","])
-                  (f ["strip"] [" ,.{}"])
-                  (f ["slice"] [20 30 2])
-                  (f ["length"] [])]))))
+    "foo|join:\",\"|strip:\" ,.{}\"|slice:20,30,2|length"
+    (v ["foo"] [(f ["join"] [","])
+                (f ["strip"] [" ,.{}"])
+                (f ["slice"] [20 30 2])
+                (f ["length"] [])])))
 
 (deftest variable-test
   (testing-parser
     (p/variable) "Variables can be simple literals."
 
-    "{{ 42 }}"      42
-    "{{ -2 }}"      -2
-    "{{ \"foo\" }}" "foo")
+    "{{ 42 }}"      (v 42 [])
+    "{{ -2 }}"      (v -2 [])
+    "{{ \"foo\" }}" (v "foo" []))
+
+  (testing-parser
+    (p/variable)
+    "Variables can be values."
+
+    "{{ dogs }}"          (v ["dogs"] [])
+    "{{ user|is_admin }}" (v ["user"] [(f ["is_admin"] [])])
+
+    "{{ \"sjl\"|is_admin }}"
+    (v "sjl" [(f ["is_admin"] [])])
+
+    "{{ user.username|slice:2,4 }}"
+    (v ["user" "username"] [(f ["slice"] [2 4])])
+
+    "{{ a|horrible:\"{{thing}}\" }}"
+    (v ["a"] [(f ["horrible"] ["{{thing}}"])]))
 
   (testing-parser
     (p/variable) "Variables can handle wonky whitespace."
 
-    "{{42}}"         42
-    "{{ 42}}"        42
-    "{{42 }}"        42
-    "{{42  }}"       42
-    "{{\n\t\n\t42}}" 42))
+    "{{42}}"         (v 42 [])
+    "{{ 42}}"        (v 42 [])
+    "{{42 }}"        (v 42 [])
+    "{{42  }}"       (v 42 [])
+    "{{\n\t\n\t42}}" (v 42 []))
+
+  )
 
 (deftest extends-test
   (testing-parser
@@ -355,17 +395,25 @@
     (p/tag-block)
     "Empty blocks are totally fine."
 
-    "{% block foo %}{% endblock %}" {:type :block :name "foo" :contents []})
+    "{% block foo %}{% endblock %}" (b "foo" []))
 
   (testing-parser
     (p/tag-block)
     "Blocks can contain anything except other blocks."
 
     "{% block foo %}hi{% endblock %}"
-    {:type :block :name "foo" :contents ["hi"]}
+    (b "foo" ["hi"])
 
     "{% block foo %}hi {{ 1 }} five{% endblock %}"
-    {:type :block :name "foo" :contents ["hi " 1 " five"]}))
+    (b "foo" ["hi " (v 1 []) " five"])
+
+    "{% block foo %}
+    {{ user.name|capitalize|trim:10 }}
+    {% endblock %}"
+    (b "foo" ["\n    "
+              (v ["user" "name"] [(f ["capitalize"] [])
+                                  (f ["trim"] [10])])
+              "\n    "])))
 
 (deftest raw-text-test
   (testing-parser
@@ -410,67 +458,150 @@
     (p/template-chunk) "A template chunk can be raw text."
 
     "Hello"     "Hello"
-    "  { foo }" "  { foo }")
+    "  { foo }" "  { foo }"
+    "..\"q\".." "..\"q\"..")
 
   (testing-parser
     (p/template-chunk) "A template chunk can be a variable."
 
-    "{{ 1 }}" 1))
+    "{{ 1 }}"    (v 1 [])
+    "{{ cats }}" (v ["cats"] [])))
 
 (deftest template-base-test
-  (letfn [(bt [contents]
-            {:type :base :contents contents})]
-    (testing-parser
-      (p/template-base)
-      "A base template can be made up of raw text, variables, ...."
+  (testing-parser
+    (p/template-base)
+    "A base template can be made up of raw text, variables, ...."
 
-      ""                        (bt [])
-      "Hello"                   (bt ["Hello"])
-      "Hello {{ \"Steve\" }}"   (bt ["Hello " "Steve"])
-      "Age: {{ 27 }} years old" (bt ["Age: " 27 " years old"]))
+    ""                        (bt [])
+    "Hello"                   (bt ["Hello"])
+    "Hello {{ \"Steve\" }}"   (bt ["Hello " (v "Steve" [])])
+    "Age: {{ 27 }} years old" (bt ["Age: " (v 27 []) " years old"]))
 
-    (testing-parser
-      (p/template-base)
-      "A base template can contain blocks."
+  (testing-parser
+    (p/template-base)
+    "A base template can contain blocks."
 
-      "{% block foo %}{% endblock %}"
-      (bt [{:type :block :name "foo" :contents []}])
+    "{% block foo %}{% endblock %}"
+    (bt [{:type :block :name "foo" :contents []}])
 
-      "hello {% block username %}{% endblock %}"
-      (bt ["hello "
-           {:type :block :name "username" :contents []}])
+    "hello {% block username %}{% endblock %}"
+    (bt ["hello "
+         {:type :block :name "username" :contents []}])
 
-      "foo {% block a %}{% endblock %} bar {{ 42 }}"
-      (bt ["foo "
-           {:type :block :name "a" :contents []}
-           " bar "
-           42]))))
+    "foo {% block a %}{% endblock %} bar {{ 42 }}"
+    (bt ["foo "
+         {:type :block :name "a" :contents []}
+         " bar "
+         (v 42 [])])))
 
 (deftest template-child-test
-  (letfn [(ct [extends blocks]
-            {:type :child :extends extends :blocks blocks})]
-    (testing-parser
-      (p/template-child)
-      "A child template requires an extends tag."
+  (testing-parser
+    (p/template-child)
+    "A child template requires an extends tag."
 
-      "{% extends \"a\" %}"     (ct "a" {})
-      "  {% extends \"a\" %}"   (ct "a" {})
-      "{% extends \"a\" %}\n\n" (ct "a" {}))
+    "{% extends \"a\" %}"     (ct "a" {})
+    "  {% extends \"a\" %}"   (ct "a" {})
+    "{% extends \"a\" %}\n\n" (ct "a" {}))
 
-    (testing-parser
-      (p/template-child)
-      "A child template may contain blocks to override."
+  (testing-parser
+    (p/template-child)
+    "A child template may contain blocks to override."
 
-      "
-      {% extends \"a\" %}
-      {% block foo %}{% endblock %}
-      "
-      (ct "a" {"foo" []})
+    "
+    {% extends \"a\" %}
+    {% block foo %}{% endblock %}
+    "
+    (ct "a" {"foo" []})
 
-      "
-      {% extends \"a\" %}
-      {% block foo %}hello world{% endblock %}
-      {% block bar %}{{ 10 }}{% endblock %}
-      "
-      (ct "a" {"foo" ["hello world"]
-               "bar" [10]}))))
+    "
+    {% extends \"a\" %}
+    {% block foo %}hello world{% endblock %}
+    {% block bar %}{{ 10 }}{% endblock %}
+    "
+    (ct "a" {"foo" ["hello world"]
+             "bar" [(v 10 [])]})))
+
+(deftest template-tag-arguments
+  (testing-parser
+    (p/ttag-generic-arg)
+    "Template tag arguments are usually left to the tags to parse/handle."
+
+    "foo"     "foo"
+    "foo.bar" "foo.bar"
+    "<="      "<="
+    "1234"    "1234"
+    "foo,bar" "foo,bar"
+    "{dogs}"  "{dogs}"
+    "'lisp"   "'lisp")
+
+  (testing-parser
+    (p/ttag-arg)
+    "Template tag arguments special case strings though."
+
+    "\"foo\""            {:string "foo"}
+    "\"a \\\"b\\\" c\""  {:string "a \"b\" c"}
+    "\"boots and cats\"" {:string "boots and cats"}
+    "\"{% okay %}\""     {:string "{% okay %}"})
+
+  (testing-parser-errors
+    (parsatron/>>
+      (p/ttag-arg)
+      (parsatron/eof))
+    "Non-string tag arguments can't contain whitespace, quotes, or end chars."
+
+    "foo\"bar"
+    "foo bar"
+    "f%}oo")
+
+
+  )
+
+(deftest template-tag-innards
+  (testing-parser
+    (p/ttag-innards)
+    "Template tag innards are made of a required path and optional arguments."
+
+    "foo"         (i ["foo"] [])
+    "foo bar"     (i ["foo"] ["bar"])
+    "foo cats 10" (i ["foo"] ["cats" "10"])
+    "if  x <  10" (i ["if"] ["x" "<" "10"])
+
+    "if username == \"sjl\""
+    (i ["if"] ["username" "==" {:string "sjl"}])))
+
+(deftest template-tag-inline
+  (testing-parser
+    (p/ttag-inline)
+    "Inline template tags stand alone, require a path, and have optional args."
+
+    "{% test %}"             (it ["test"] [])
+    "{%test%}"               (it ["test"] [])
+    "{% forms.csrf_token %}" (it ["forms" "csrf_token"] [])
+    "{% messages user %}"    (it ["messages"] ["user"])
+
+    "{% if x < 20
+    and user.username == \"sjl\"
+    and request.user|is_admin %}"
+    (it ["if"] ["x" "<" "20"
+                "and" "user.username" "==" {:string "sjl"}
+                "and" "request.user|is_admin"])
+
+    "{% very.fun \"{% tag %}\" %}"
+    (it ["very" "fun"] [{:string "{% tag %}"}]))
+
+  (testing-parser-errors
+    (p/ttag-inline)
+    "Inline template tags must start with a valid tag name."
+
+    "{%"
+    "%}"
+    "{%%}"
+    "{% %}"
+    "{% >> %}"
+    "{% ] %}"
+    "{% { %}"
+    "{% ,dogs %}"
+    "{% .dogs %}"
+    "{% \"if\" %}"
+    "{% 'lisp %}"
+    "{% :keywords-are-not-valid-path-names-for-now %}"))

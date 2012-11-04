@@ -134,7 +134,7 @@
 
 (defparser variable []
   (between (variable-open) (variable-close)
-           (choice (literal))))
+           (value)))
 
 
 ; Tags ------------------------------------------------------------------------
@@ -147,13 +147,6 @@
   (optional-whitespace)
   (string "%}")
   (always nil))
-
-(defparser tag-guts []
-  (always nil))
-
-(defparser tag []
-  (between (tag-open) (tag-close)
-           (tag-guts)))
 
 
 ; Extends ---------------------------------------------------------------------
@@ -201,6 +194,38 @@
     (always {:type :block
              :name name
              :contents contents})))
+
+
+; Inline Template Tag ---------------------------------------------------------
+(defparser ttag-arg-char []
+  (let->> [ch (token (complement #{\space \newline \tab \"}))
+           nch (lookahead (optional (string "}")))]
+    (if (and (= ch \%) nch)
+      (never)
+      (always ch))))
+
+(defparser ttag-generic-arg []
+  (let->> [contents (many1 (ttag-arg-char))]
+    (always (apply str contents))))
+
+(defparser ttag-arg []
+  (choice (let->> [s (literal-string)]
+            ; This is really shitty.
+            (always {:string s}))
+          (ttag-generic-arg)))
+
+(defparser ttag-innards []
+  (let->> [ttag-path (path)
+           ttag-args (optional (>>
+                                 (required-whitespace)
+                                 (separated (ttag-arg) (required-whitespace))))]
+    (always {:path ttag-path
+             :args (or ttag-args [])})))
+
+(defparser ttag-inline []
+  (let->> [innards (between (tag-open) (tag-close)
+                            (ttag-innards))]
+    (always (assoc innards :type :inline-tag))))
 
 
 ; Raw Text --------------------------------------------------------------------
