@@ -1,7 +1,7 @@
 (ns dram.test.parser
   (:require [dram.parser :as p]
             [clojure.test :refer :all]
-            [the.parsatron :refer [run]]))
+            [the.parsatron :as parsatron :refer [run]]))
 
 
 (defmacro is-error [input parser]
@@ -31,6 +31,76 @@
 
     "42" 42
     "a"  nil))
+
+(deftest separator-test
+  (testing-parser
+    (p/separated1 (parsatron/digit) (parsatron/char \,))
+    "The separated1 parser parses items separated by things."
+
+    "1"     [\1]
+    "1,2"   [\1 \2]
+    "1,2,3" [\1 \2 \3])
+
+  (testing-parser
+    (p/separated1 (p/literal) (parsatron/char \,))
+    "Separated items can be complex."
+
+    "1"                  [1]
+    "42,\"hello world\"" [42 "hello world"])
+
+  (testing-parser-errors
+    (p/separated1 (p/literal) (parsatron/char \,))
+    "The separated1 parser requires at least one item."
+
+    ""
+    ",")
+
+  (testing-parser-errors
+    (parsatron/>>
+      (p/separated1 (p/literal) (parsatron/char \,))
+      (parsatron/eof))
+    "The separated1 parser doesn't allow garbage."
+
+    "dogs"
+    "1,,2")
+
+  (testing-parser
+    (p/separated (parsatron/digit) (parsatron/char \,))
+    "The separated parser is like separated1, but allows zero-length seqs."
+
+    "1"     [\1]
+    "1,2"   [\1 \2]
+    "1,2,3" [\1 \2 \3]
+    ""      [])
+
+  (testing-parser
+    (parsatron/>>
+      (p/separated (parsatron/digit) (parsatron/char \,))
+      (parsatron/char \!))
+    "The separated parser does not consume input if it fails."
+
+    "1!"   \!
+    "1,2!" \!
+    "!"    \!)
+
+  (testing-parser
+    (parsatron/either
+      (p/separated1 (parsatron/digit) (parsatron/char \,))
+      (parsatron/char \!))
+    "The separated1 parser does not consume input if it fails."
+
+    "1,2" [\1 \2]
+    "!"   \!)
+
+  (testing-parser
+    (parsatron/let->> [a (p/separated (parsatron/digit) (parsatron/char \,))
+                       b (parsatron/char \,)]
+                      (parsatron/always [a b]))
+    "A more complicated example of input consumption."
+
+    "1,2," [[\1 \2] \,]
+    "1,"   [[\1] \,]
+    ","    [[] \,]))
 
 (deftest whitespace-test
   (testing-parser

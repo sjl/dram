@@ -8,6 +8,18 @@
   (either (attempt p)
           (always nil)))
 
+(defparser separated1 [p separatorp]
+  (attempt
+    (let->> [fst p
+             rst (many (attempt (>> separatorp p)))]
+      (always (concat [fst] rst)))))
+
+(defparser separated [p separatorp]
+  (let->> [result (optional (separated1 p separatorp))]
+    (always (if (nil? result)
+              []
+              result))))
+
 
 ; Whitespace ------------------------------------------------------------------
 (defparser whitespace-char []
@@ -82,9 +94,7 @@
     (always (apply str contents))))
 
 (defparser path []
-  (let->> [seg (path-segment)
-           segs (many (>> (char \.) (path-segment)))]
-    (always (concat [seg] segs))))
+  (separated1 (path-segment) (char \.)))
 
 
 ; Context Values --------------------------------------------------------------
@@ -94,9 +104,7 @@
 
 (defparser value-filter-args []
   (char \:)
-  (let->> [arg (value-filter-arg)
-           args (many (>> (char \,) (value-filter-arg)))]
-    (always (concat [arg] args))))
+  (separated1 (value-filter-arg) (char \,)))
 
 (defparser value-filter []
   (char \|)
