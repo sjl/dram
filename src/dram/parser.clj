@@ -1,7 +1,10 @@
 (ns dram.parser
   (:refer-clojure :exclude [char])
-  (:use [the.parsatron]))
+  (:use [the.parsatron])
+  (:require [clojure.string :refer [join]]))
 
+
+(def reserved-tag-names #{"extends" "block" "load"})
 
 ; Utilities -------------------------------------------------------------------
 (defparser optional [p]
@@ -46,7 +49,7 @@
 
 (defparser literal-integer []
   (either (attempt (literal-integer-neg))
-          (literal-integer-pos)))
+          (attempt (literal-integer-pos))))
 
 
 ; Strings ---------------------------------------------------------------------
@@ -225,7 +228,12 @@
 (defparser ttag-inline []
   (let->> [innards (between (tag-open) (tag-close)
                             (ttag-innards))]
-    (always (assoc innards :type :inline-tag))))
+    (let [tag-name (join "." (:path innards))]
+      ; There are a few special cases that are not valid template tag names.
+      (if (or (reserved-tag-names tag-name)
+              (.startsWith tag-name "end"))
+        (never)
+        (always (assoc innards :type :inline-tag))))))
 
 
 ; Raw Text --------------------------------------------------------------------
@@ -244,6 +252,7 @@
 ; High-Level ------------------------------------------------------------------
 (defparser template-chunk []
   (choice (attempt (variable))
+          (attempt (ttag-inline))
           (attempt (raw-text))))
 
 (defparser template-base []
@@ -262,17 +271,14 @@
              :blocks (into {} (map (juxt :name :contents) blocks))})))
 
 (defparser template []
-  (choice (template-base)
-          (template-child)))
+  (let [result (either (template-base)
+                       (template-child))
+        _ (eof)]
+    (always result)))
 
 
 ; Main ------------------------------------------------------------------------
 (defn parse
   "Parse the given string into a Dram AST."
   [string]
-  (run (>> (literal-string)) string))
-
-
-(comment
-  (parse "\"foo\"")
-  )
+  (run (template) string))
