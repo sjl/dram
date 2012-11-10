@@ -271,9 +271,9 @@
              :blocks (into {} (map (juxt :name :contents) blocks))})))
 
 (defparser template []
-  (let [result (either (template-base)
-                       (template-child))
-        _ (eof)]
+  (let->> [result (either (template-base)
+                          (template-child))
+           _ (eof)]
     (always result)))
 
 
