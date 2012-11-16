@@ -1,8 +1,15 @@
 (ns dram.test.rendering
   (:require [dram.rendering :as r]
+            [dram.parser :refer [parse]]
             [dram.test.utils.ast :as ast]
             [clojure.test :refer :all]))
 
+
+(deftest slurp-test
+  (testing "Slurping should do its best to get the template."
+    (are [path content] (= (r/slurp-template path) content)
+         "dram-test/sample.dram"           "this is a sample template\n"
+         "templates/dram-test/sample.dram" "this is a sample template\n")))
 
 (deftest render-value-unfiltered-test
   (testing "Literals render to themselves."
@@ -37,8 +44,7 @@
          ["a" "0"]     {:a [:goal]}
          ["a" "b" "c"] {:a {"b" {"c" :goal}}}
          ["a" "b" "c"] {:a {"b" {:c :goal}}}
-         ["0" "0"]     [[:goal]]
-         ))
+         ["0" "0"]     [[:goal]]))
   (testing "Paths can bail early if a segment isn't found."
     (are [base context] (nil? (r/render-value (ast/v base) context))
          ["a"]     {}
@@ -69,25 +75,62 @@
          ["a"] {:a :b}  ":b"
          ["a"] {:a "x"} "x")))
 
-(deftest render-base-simple-test
-  (testing "Simple, string-only base templates should be trivial."
-    (are [template context result] (= result (r/render-string template context))
-         "foo" {}     "foo"
-         ""    {}     ""
-         ""    {:a 1} ""
-         "foo" {:a 1} "foo"))
-  (testing "Base templates without blocks should be pretty simple too."
-    (are [template context result] (= result (r/render-string template context))
-         "a {{ 1 }} b"       {} "a 1 b"
-         "a {{ \"and\" }} b" {} "a and b"
-         "{{ 1}}{{2}}"       {} "12"
+(deftest render-block-test
+  (testing "AST blocks should render into an intermediate [name str] form."
+    (are [name contents context result]
+         (= result (r/render-block (ast/b name contents) context))
+         "body" ["foo" "bar"]          {} ["body" "foobar"]
+         "body" ["meow" (ast/v 10)]    {} ["body" "meow10"]
+         "body" ["meow" (ast/v ["a"])] {} ["body" "meow"]
 
-         "Hello, {{ user.name }}!" {:user {:name "Steve"}}   "Hello, Steve!"
-         "Hello, {{ user.name }}!" {:user {"name" "Steve"}}  "Hello, Steve!"
-         "Hello, {{ user.name }}!" {"user" {:name "Steve"}}  "Hello, Steve!"
-         "Hello, {{ user.name }}!" {"user" {"name" "Steve"}} "Hello, Steve!"
+         "sample"
+         ["username:" (ast/v ["user" "username"])]
+         {:user {:username "sjl"}}
+         ["sample" "username:sjl"])))
 
-         "{{ a.1 }}, {{a.2}}" {:a "xyz"}               "y, z"
-         "{{ a.0 }}, {{a.2}}" {:a ["foo" "bar" "baz"]} "foo, baz"
-         "{{ a.0 }}, {{a.2}}" {:a {0 :q "2" :r}}       ":q, :r"
-         )))
+(deftest render-base-test
+  (testing "Simple base templates render into [[name str] ...] seqs."
+    (are [template context result]
+         (= result (r/render-base (parse template) context))
+
+         "foo"
+         {}
+         [[nil "foo"]]
+
+         "foo {{ 1 }} bar"
+         {}
+         [[nil "foo "]
+          [nil "1"]
+          [nil " bar"]]
+
+         "foo {% block body %}body {{ 1 }} text{% endblock %} bar"
+         {}
+         [[nil "foo "]
+          ["body" "body 1 text"]
+          [nil " bar"]]
+
+         (apply str
+                "{% block a %}a: {{ a.val }}{% endblock %}"
+                "{% block b %}b: {{ b.val }}{% endblock %}")
+         {:a {:val 1}}
+         [["a" "a: 1"]
+          ["b" "b: "]])))
+
+
+(deftest full-template-test
+  (testing "Send templates all the way through the pipeline."
+    (are [path context result] (= (r/render-template path context) result)
+         "dram-test/sample.dram" {} "this is a sample template\n"
+         "dram-test/literals.dram" {} "1\ncats\n"
+
+         "dram-test/user.dram" {} "Hello, !\n"
+
+         "dram-test/user.dram"
+         {:user {"username" "sjl"}}
+         "Hello, sjl!\n"
+
+         "dram-test/base.dram" {} "<html><head></head></html>\n"
+         )
+    )
+
+  )
